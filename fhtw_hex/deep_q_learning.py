@@ -17,6 +17,7 @@ class DQN(nn.Module):
     def forward(self, x):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
+        #x = torch.sigmoid(self.fc3(x)) #the used a sigmoid in neurohex, arguing that it makes sense because the output must be between -1 and 1, but might work better without it
         x = self.fc3(x)
         return x
 
@@ -35,7 +36,7 @@ class ReplayMemory:
         return len(self.memory)
 
 
-def train_dqn(agent, memory, optimizer, criterion, batch_size, gamma):
+def train_dqn(policy, memory, optimizer, criterion, batch_size, gamma,target):
     if len(memory) < batch_size:
         return
     transitions = memory.sample(batch_size)
@@ -47,8 +48,9 @@ def train_dqn(agent, memory, optimizer, criterion, batch_size, gamma):
     batch_next_state = torch.stack(batch_next_state)
     batch_done = torch.tensor(batch_done, dtype=torch.float32)
 
-    current_q_values = agent(batch_state).gather(1, batch_action).squeeze()
-    max_next_q_values = agent(batch_next_state).max(1)[0]
+    #already takes final states into account
+    current_q_values = policy(batch_state).gather(1, batch_action).squeeze()
+    max_next_q_values = target(batch_next_state).max(1)[0]
     expected_q_values = batch_reward + (gamma * max_next_q_values * (1 - batch_done))
 
     loss = criterion(current_q_values, expected_q_values)
@@ -59,6 +61,7 @@ def train_dqn(agent, memory, optimizer, criterion, batch_size, gamma):
 
 
 def get_state_tensor(board):
+    """Convert the 2 dimensional board to a one-dimensional tensor"""
     return torch.tensor(board, dtype=torch.float32).view(-1)
 
 
@@ -76,17 +79,21 @@ def select_action(agent, state, epsilon, action_space,size):
 
 
 def main():
-    size = 4
-    num_episodes = 2000
+    size = 5
+    num_episodes = 10000
     memory = ReplayMemory(10000)
     batch_size = 64
     gamma = 0.999
     epsilon_start = 1.0
     epsilon_end = 0.01
-    epsilon_decay = 0.995
+    epsilon_decay = 0.9995
+    TAU = 0.14
 
-    agent = DQN(size*size, size*size)
-    optimizer = optim.Adam(agent.parameters())
+    policy = DQN(size*size, size*size)
+    target = DQN(size*size, size*size)
+    target.load_state_dict(policy.state_dict())
+
+    optimizer = optim.Adam(policy.parameters())
     criterion = nn.MSELoss()
     episode_rewards = []
 
@@ -98,7 +105,7 @@ def main():
 
         while game.winner == 0:
             action_space = game.get_action_space()
-            action = select_action(agent, state, epsilon, action_space,size)
+            action = select_action(policy, state, epsilon, action_space,size)
             game.moove(action)
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             if reward == 0:
@@ -116,15 +123,21 @@ def main():
                 break
         episode_rewards.append(episode_reward)
 
-        train_dqn(agent, memory, optimizer, criterion, batch_size, gamma)
+        train_dqn(policy, memory, optimizer, criterion, batch_size, gamma,target)
+
+        target_state_dict = target.state_dict()
+        policy_state_dict = policy.state_dict()
+        for key in policy_state_dict:
+            target_state_dict[key] = policy_state_dict[key] * TAU + target_state_dict[key] * (1 - TAU)
 
         if episode % 100 == 0:
             print(f'Episode {episode}, Epsilon: {epsilon}')
+        target.load_state_dict(target_state_dict)
 
     # Plot the episode rewards
-    window_size = 500
+    window_size = num_episodes/100
     window = np.ones(int(window_size)) / float(window_size)
-    test = np.convolve(episode_rewards, window, 'same')
+    test = np.convolve(episode_rewards, window, 'valid')
     plt.plot(test, color = 'r')
     plt.scatter(range(len(episode_rewards)), episode_rewards, s=10)
     plt.xlabel('Episode')
@@ -132,7 +145,7 @@ def main():
     plt.title('Reward Evolution During Training')
     plt.show()
 
-    torch.save(agent.state_dict(), "hex_dqn_agent.pth")
+    torch.save(policy.state_dict(), "hex_dqn_agent.pth")
 
 if __name__ == "__main__":
     main()

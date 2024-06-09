@@ -76,14 +76,14 @@ def select_action(agent, state, epsilon, action_space,size):
 
 
 def main():
-    size = 5
-    num_episodes = 4000
+    size = 4
+    num_episodes = 2000
     memory = ReplayMemory(10000)
     batch_size = 64
     gamma = 0.999
     epsilon_start = 1.0
     epsilon_end = 0.01
-    epsilon_decay = 0.9999
+    epsilon_decay = 0.995
 
     agent = DQN(size*size, size*size)
     optimizer = optim.Adam(agent.parameters())
@@ -100,6 +100,9 @@ def main():
             action_space = game.get_action_space()
             action = select_action(agent, state, epsilon, action_space,size)
             game.moove(action)
+            reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
+            if reward == 0:
+                game._random_moove() #for now, the opponent has the random strategy
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             next_state = get_state_tensor(game.board)
             done = game.winner != 0

@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(DQN, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, output_dim)
+        self.fc1 = nn.Linear(input_dim, 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, output_dim)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -50,8 +50,12 @@ def train_dqn(policy, memory, optimizer, criterion, batch_size, gamma,target):
 
     #already takes final states into account
     current_q_values = policy(batch_state).gather(1, batch_action).squeeze()
-    max_next_q_values = target(batch_next_state).max(1)[0]
+    #the goal is to ignore impossible actions in training
+    temp = 1000
+    max_next_q_values = (target(batch_next_state)-((batch_next_state != 0)*temp)).max(1)[0]
+
     expected_q_values = batch_reward + (gamma * max_next_q_values * (1 - batch_done))
+
 
     loss = criterion(current_q_values, expected_q_values)
 
@@ -80,14 +84,14 @@ def select_action(agent, state, epsilon, action_space,size):
 
 def main():
     size = 5
-    num_episodes = 10000
+    num_episodes = 50000
     memory = ReplayMemory(10000)
     batch_size = 64
-    gamma = 0.999
+    gamma = 0.99999
     epsilon_start = 1.0
     epsilon_end = 0.01
     epsilon_decay = 0.9995
-    TAU = 0.14
+    TAU = 0.05
 
     policy = DQN(size*size, size*size)
     target = DQN(size*size, size*size)

@@ -13,11 +13,8 @@ class DQN(nn.Module):
     def __init__(self, board_size, output_dim):
         super(DQN, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.bn2 = nn.BatchNorm2d(64)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3 = nn.BatchNorm2d(64)
 
         def conv2d_size_out(size, kernel_size=3, stride=1, padding=1):
             return (size - kernel_size + 2 * padding) // stride + 1
@@ -27,17 +24,15 @@ class DQN(nn.Module):
         linear_input_size = convw * convh * 64
 
         self.fc1 = nn.Linear(linear_input_size, 256)
-        self.dropout = nn.Dropout(0.5)
         self.fc2 = nn.Linear(256, output_dim)
 
     def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
         x = x.view(x.size(0), -1)  # Flatten the tensor for the fully connected layer
         x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
+        x = F.sigmoid(self.fc2(x))
         return x
 
 
@@ -72,7 +67,7 @@ def train_dqn(policy, memory, optimizer, criterion, batch_size, gamma, target, d
     next_q_values = target(batch_next_state.unsqueeze(1))
 
     valid_action_mask = (batch_next_state == 0).view(batch_next_state.size(0), -1).float().to(device)
-    next_q_values = next_q_values * valid_action_mask + (valid_action_mask - 1) * float('-inf')
+    next_q_values = next_q_values * valid_action_mask + (1 - valid_action_mask) * float(-10)
 
     max_next_q_values = next_q_values.max(1)[0]
     expected_q_values = batch_reward + (gamma * max_next_q_values * (1 - batch_done))
@@ -83,6 +78,7 @@ def train_dqn(policy, memory, optimizer, criterion, batch_size, gamma, target, d
     loss.backward()
     optimizer.step()
 
+    return loss.item()
 
 def get_state_tensor(board):
     """Convert the 2-dimensional board to a tensor"""
@@ -140,7 +136,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     size = 5
-    num_episodes = 10000
+    num_episodes = 20000
     memory = ReplayMemory(50000)
     batch_size = 64
     gamma = 0.99999
@@ -157,12 +153,15 @@ def main():
     scheduler = StepLR(optimizer, step_size=1000, gamma=0.99)
     criterion = nn.MSELoss()
     episode_rewards = []
+    losses = []
+    update_frequency = 100
 
     for episode in range(num_episodes):
         game = hexPosition(size)
         state = get_state_tensor(game.board).to(device)
         epsilon = max(epsilon_end, epsilon_start * (epsilon_decay ** episode))
         episode_reward = 0
+
 
         while game.winner == 0:
             action_space = game.get_action_space()
@@ -184,17 +183,15 @@ def main():
                 break
         episode_rewards.append(episode_reward)
 
-        train_dqn(policy, memory, optimizer, criterion, batch_size, gamma, target, device)
+        loss = train_dqn(policy, memory, optimizer, criterion, batch_size, gamma, target, device)
+        losses.append(loss)
         scheduler.step()
 
-        target_state_dict = target.state_dict()
-        policy_state_dict = policy.state_dict()
-        for key in policy_state_dict:
-            target_state_dict[key] = policy_state_dict[key] * TAU + target_state_dict[key] * (1 - TAU)
+        if num_episodes % update_frequency == 0:
+            target.load_state_dict(policy.state_dict())
 
         if episode % 100 == 0:
-            print(f'Episode {episode}, Epsilon: {epsilon}')
-        target.load_state_dict(target_state_dict)
+            print(f'Episode {episode}, Epsilon: {epsilon}, Loss: {loss}')
 
     window_size = num_episodes / 100
     window = np.ones(int(window_size)) / float(window_size)
@@ -204,6 +201,13 @@ def main():
     plt.xlabel('Episode')
     plt.ylabel('Reward')
     plt.title('Reward Evolution During Training')
+    plt.show()
+
+
+    plt.plot(losses)
+    plt.xlabel('Episode')
+    plt.ylabel('Loss')
+    plt.title('Loss Evolution During Training')
     plt.show()
 
     torch.save(policy.state_dict(), "hex_dqn_agent.pth")

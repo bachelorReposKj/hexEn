@@ -142,7 +142,7 @@ class hexPosition (object):
         Evaluates the board position and adjusts the 'winner' attribute of the object accordingly.
         """
         self._evaluate_white(verbose=verbose)
-        self._evaluate_black(verbose=verbose)  
+        self._evaluate_black(verbose=verbose)
     def _evaluate_white (self, verbose):
         """
         Evaluate whether the board position is a win for player '1'. Uses breadth first search.

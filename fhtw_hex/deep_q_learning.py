@@ -7,34 +7,8 @@ from collections import deque
 from hex_engine import hexPosition
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
-
-
-class DQN(nn.Module):
-    def __init__(self, board_size, output_dim):
-        super(DQN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-
-        def conv2d_size_out(size, kernel_size=3, stride=1, padding=1):
-            return (size - kernel_size + 2 * padding) // stride + 1
-
-        convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(board_size)))
-        convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(board_size)))
-        linear_input_size = convw * convh * 64
-
-        self.fc1 = nn.Linear(linear_input_size, 256)
-        self.fc2 = nn.Linear(256, output_dim)
-
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = x.view(x.size(0), -1)  # Flatten the tensor for the fully connected layer
-        x = F.relu(self.fc1(x))
-        x = F.sigmoid(self.fc2(x))
-        return x
-
+from dqn import DQN, hexPosition
+from datetime import datetime
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -67,7 +41,7 @@ def train_dqn(policy, memory, optimizer, criterion, batch_size, gamma, target, d
     next_q_values = target(batch_next_state.unsqueeze(1))
 
     valid_action_mask = (batch_next_state == 0).view(batch_next_state.size(0), -1).float().to(device)
-    next_q_values = next_q_values * valid_action_mask + (1 - valid_action_mask) * float(-10)
+    next_q_values = next_q_values * valid_action_mask + (1 - valid_action_mask) * float(-2)
 
     max_next_q_values = next_q_values.max(1)[0]
     expected_q_values = batch_reward + (gamma * max_next_q_values * (1 - batch_done))
@@ -131,23 +105,37 @@ def evaluate_agent(policy, size, device):
     print(f'Average Episode Length: {average_episode_length}')
     print(f'Average Reward: {average_reward}')
 
+def get_action_no_epsilon (adversary,board, action_set,size = 5):
+    with torch.no_grad():
+        q_values = adversary(board.unsqueeze(0).unsqueeze(0)).view(-1)
+        valid_q_values = [q_values[action[0] * size + action[1]] for action in action_set]
+        valid_q_values = torch.tensor(valid_q_values)
+        return action_set[torch.argmax(valid_q_values).item()]
+
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     size = 5
-    num_episodes = 20000
+    num_episodes = 50000
     memory = ReplayMemory(50000)
     batch_size = 64
     gamma = 0.99999
     epsilon_start = 1.0
-    epsilon_end = 0.01
-    epsilon_decay = 0.9995
+    epsilon_end = 0.15
+    epsilon_decay = 0.9999
     TAU = 0.05
 
+    adversary = DQN(size, size * size)
+    filename = "hex_dqn_agent.pth"
+    adversary.load_state_dict(torch.load(filename))
+
     policy = DQN(size, size * size).to(device)
+    policy.load_state_dict(torch.load(filename))
     target = DQN(size, size * size).to(device)
     target.load_state_dict(policy.state_dict())
+
+
 
     optimizer = optim.Adam(policy.parameters())
     scheduler = StepLR(optimizer, step_size=1000, gamma=0.99)
@@ -155,6 +143,8 @@ def main():
     episode_rewards = []
     losses = []
     update_frequency = 100
+
+    tmp = hexPosition(size = 5)
 
     for episode in range(num_episodes):
         game = hexPosition(size)
@@ -169,7 +159,10 @@ def main():
             game.moove(action)
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             if reward == 0:
-                game._random_moove()  # for now, the opponent has the random strategy
+                #game._random_moove()  # for now, the opponent has the random strategy
+                action = get_action_no_epsilon(adversary, get_state_tensor(tmp.recode_black_as_white(game.board)), game.get_action_space(recode_black_as_white = True))
+                action = tmp.recode_coordinates(action)
+                game.moove(action)
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             next_state = get_state_tensor(game.board).to(device)
             done = game.winner != 0
@@ -210,8 +203,9 @@ def main():
     plt.title('Loss Evolution During Training')
     plt.show()
 
-    torch.save(policy.state_dict(), "hex_dqn_agent.pth")
-
+    current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"hex_dqn_agent_{current_datetime}.pth"
+    torch.save(policy.state_dict(), filename)
     # Run simulation to evaluate the trained agent
     evaluate_agent(target, size, device)
 

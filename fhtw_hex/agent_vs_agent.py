@@ -2,6 +2,7 @@ import torch
 import random
 from hex_engine import hexPosition
 from dqn import DQN
+from deep_q_learning import select_action
 
 class AgentWrapper:
     def __init__(self, model, size):
@@ -69,10 +70,60 @@ def machine_vs_machine_wrapper(size, model_white, model_black, play_against_rand
         # Run the machine_vs_machine function with both agents
         game.machine_vs_machine(machine1=agent_white, machine2=agent_black)
 
+
+def human_vs_machine_wrapper(size, human_player, model):
+    # Create agent wrappers for both models
+
+    # Create a Hex game instance
+
+    game = hexPosition(size)
+
+    agent_white = AgentWrapper(model, size)
+
+    game.human_vs_machine( human_player=human_player, machine = agent_white)
+
+def evaluate_agent(policy, size):
+    num_simulations = 20000
+    total_episode_length = 0
+    total_reward = 0
+
+    for _ in range(num_simulations):
+        game = hexPosition(size)
+        state = get_state_tensor(game.board)
+        episode_reward = 0
+        episode_length = 0
+
+        while game.winner == 0:
+            action_space = game.get_action_space()
+            action = select_action(policy, state, 0, action_space, size)
+            game.moove(action)
+            reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
+            if reward == 0:
+                game._random_moove()  # for now, the opponent has the random strategy
+            reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
+            state = get_state_tensor(game.board)
+
+            episode_reward += reward
+            episode_length += 1
+
+            if game.winner != 0:
+                break
+
+        total_episode_length += episode_length
+        total_reward += episode_reward
+
+
+    average_episode_length = total_episode_length / num_simulations
+    average_reward = total_reward / num_simulations
+
+    print(f'Average Episode Length: {average_episode_length}')
+    print(f'Average Reward: {average_reward}')
+
+
 if __name__ == "__main__":
     size = 5  # Board size
-    model_white_path = "hex_dqn_agent_2024-06-16_12-59-46.pth"
-    model_black_path = ("hex_dqn_agent.pth")
+    model_white_path = "hex_dqn_agent_2024-06-17_00-29-09.pth"
+    model_black_path = "hex_dqn_agent_2024-06-16_23-13-40.pth"
 
     # Load the models
     model_white = DQN(size, size * size)
@@ -84,8 +135,18 @@ if __name__ == "__main__":
     model_black.eval()
 
     # Choose whether to play against random agent
-    play_against_random = True # Set t# o False to play agents against each other
+    play_against_random = False # Set t# o False to play agents against each other
 
+
+    play_against_human = False
     # Run the competition
 
-    machine_vs_machine_wrapper(size, model_white, model_black, play_against_random)
+    evaluate = True
+
+    if evaluate == True:
+        evaluate_agent(model_white,5)
+    elif play_against_human:
+        human_vs_machine_wrapper(size, human_player=-1, model = model_white)
+
+    else:
+        machine_vs_machine_wrapper(size, model_white, model_black, play_against_random)

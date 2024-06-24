@@ -121,9 +121,9 @@ def evaluate_agent(policy, size):
 
 
 if __name__ == "__main__":
-    size = 5  # Board size
-    model_white_path = "hex_dqn_agent_2024-06-17_00-29-09.pth"
-    model_black_path = "hex_dqn_agent_2024-06-16_23-13-40.pth"
+    size = 7  # Board size
+    model_white_path = "hex_dqn_agent_2024-06-24_17-29-35.pth"
+    model_black_path = "hex_dqn_agent_2024-06-24_17-29-35.pth"
 
     # Load the models
     model_white = DQN(size, size * size)
@@ -138,10 +138,10 @@ if __name__ == "__main__":
     play_against_random = False # Set t# o False to play agents against each other
 
 
-    play_against_human = False
+    play_against_human = True
     # Run the competition
 
-    evaluate = True
+    evaluate = False
 
     if evaluate == True:
         evaluate_agent(model_white,5)

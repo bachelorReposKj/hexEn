@@ -69,7 +69,7 @@ def select_action(agent, state, epsilon, action_space, size, device):
             return action_space[torch.argmax(valid_q_values).item()]
 
 def evaluate_agent(policy, size, device):
-    num_simulations = 200
+    num_simulations = 20000
     total_episode_length = 0
     total_reward = 0
 
@@ -116,29 +116,31 @@ def get_action_no_epsilon (adversary,board, action_set,size = 5):
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    size = 5
+    size = 7
     num_episodes = 50000
     memory = ReplayMemory(50000)
     batch_size = 64
     gamma = 0.99999
     epsilon_start = 1.0
     epsilon_end = 0.15
-    epsilon_decay = 0.9999
+    epsilon_decay = 0.99995
     TAU = 0.05
 
-    adversary = DQN(size, size * size)
+    #adversary = DQN(size, size * size)
     filename = "hex_dqn_agent.pth"
-    adversary.load_state_dict(torch.load(filename))
+    #adversary.load_state_dict(torch.load(filename))
 
     policy = DQN(size, size * size).to(device)
-    policy.load_state_dict(torch.load(filename))
+    #policy.load_state_dict(torch.load(filename))
     target = DQN(size, size * size).to(device)
     target.load_state_dict(policy.state_dict())
 
 
-
-    optimizer = optim.Adam(policy.parameters())
-    scheduler = StepLR(optimizer, step_size=1000, gamma=0.99)
+    lr = 0.001
+    gamma_lr = 0.99
+    step_size = 2000
+    optimizer = optim.Adam(policy.parameters(), lr = lr)
+    scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma_lr)
     criterion = nn.MSELoss()
     episode_rewards = []
     losses = []
@@ -159,10 +161,10 @@ def main():
             game.moove(action)
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             if reward == 0:
-                #game._random_moove()  # for now, the opponent has the random strategy
-                action = get_action_no_epsilon(adversary, get_state_tensor(tmp.recode_black_as_white(game.board)), game.get_action_space(recode_black_as_white = True))
-                action = tmp.recode_coordinates(action)
-                game.moove(action)
+                game._random_moove()  # for now, the opponent has the random strategy
+                #action = get_action_no_epsilon(adversary, get_state_tensor(tmp.recode_black_as_white(game.board)), game.get_action_space(recode_black_as_white = True))
+                #action = tmp.recode_coordinates(action)
+                #game.moove(action)
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             next_state = get_state_tensor(game.board).to(device)
             done = game.winner != 0
@@ -213,6 +215,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-

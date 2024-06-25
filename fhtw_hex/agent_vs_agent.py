@@ -122,8 +122,8 @@ def evaluate_agent(policy, size):
 
 if __name__ == "__main__":
     size = 7  # Board size
-    model_white_path = "hex_dqn_agent_2024-06-24_17-29-35.pth"
-    model_black_path = "hex_dqn_agent_2024-06-24_17-29-35.pth"
+    model_white_path = "hex_dqn_agent_2024-06-25_10-34-03.pth"
+    model_black_path = "hex_dqn_agent_2024-06-25_10-34-03.pth"
 
     # Load the models
     model_white = DQN(size, size * size)

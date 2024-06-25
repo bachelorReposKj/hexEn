@@ -126,12 +126,12 @@ def main():
     epsilon_decay = 0.99995
     TAU = 0.05
 
-    #adversary = DQN(size, size * size)
-    filename = "hex_dqn_agent.pth"
-    #adversary.load_state_dict(torch.load(filename))
+    adversary = DQN(size, size * size)
+    filename = "hex_dqn_agent_2024-06-25_08-51-23.pth"
+    adversary.load_state_dict(torch.load(filename))
 
     policy = DQN(size, size * size).to(device)
-    #policy.load_state_dict(torch.load(filename))
+    policy.load_state_dict(torch.load("hex_dqn_agent_2024-06-24_22-11-46.pth"))
     target = DQN(size, size * size).to(device)
     target.load_state_dict(policy.state_dict())
 
@@ -146,7 +146,7 @@ def main():
     losses = []
     update_frequency = 100
 
-    tmp = hexPosition(size = 5)
+    tmp = hexPosition(size)
 
     for episode in range(num_episodes):
         game = hexPosition(size)
@@ -161,10 +161,10 @@ def main():
             game.moove(action)
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             if reward == 0:
-                game._random_moove()  # for now, the opponent has the random strategy
-                #action = get_action_no_epsilon(adversary, get_state_tensor(tmp.recode_black_as_white(game.board)), game.get_action_space(recode_black_as_white = True))
-                #action = tmp.recode_coordinates(action)
-                #game.moove(action)
+                #game._random_moove()  # for now, the opponent has the random strategy
+                action = get_action_no_epsilon(adversary, get_state_tensor(tmp.recode_black_as_white(game.board)), game.get_action_space(recode_black_as_white = True))
+                action = tmp.recode_coordinates(action)
+                game.moove(action)
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             next_state = get_state_tensor(game.board).to(device)
             done = game.winner != 0

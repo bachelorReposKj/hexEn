@@ -341,3 +341,9 @@ class hexPosition (object):
         file = open(path, 'ab')
         pickle.dump(self, file)                     
         file.close()
+
+    def flip_board_180(self):
+        """
+        Flips the board by 180 degrees. Only needed for training, because the game odds stay exactly the same if you flip by 180 degrees.
+        """
+        self.board = [row[::-1] for row in self.board[::-1]]

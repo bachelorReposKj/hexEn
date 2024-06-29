@@ -158,6 +158,7 @@ def main():
 
         tmp = hexPosition(size=5)
 
+
         while game.winner == 0:
             action_space = game.get_action_space()
             action = select_action(policy, state, epsilon, action_space, size, device)

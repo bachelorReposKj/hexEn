@@ -69,7 +69,7 @@ def select_action(agent, state, epsilon, action_space, size, device):
             return action_space[torch.argmax(valid_q_values).item()]
 
 def evaluate_agent(policy, size, device):
-    num_simulations = 20000
+    num_simulations = 2000
     total_episode_length = 0
     total_reward = 0
 
@@ -117,7 +117,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     size = 7
-    num_episodes = 50000
+    num_episodes = 20000
     memory = ReplayMemory(50000)
     batch_size = 64
     gamma = 0.99999
@@ -127,18 +127,18 @@ def main():
     TAU = 0.05
 
     adversary = DQN(size, size * size)
-    filename = "hex_dqn_agent_2024-06-25_08-51-23.pth"
+    filename = "hex_dqn_agent_2024-06-25_11-11-18.pth"
     adversary.load_state_dict(torch.load(filename))
 
     policy = DQN(size, size * size).to(device)
-    policy.load_state_dict(torch.load("hex_dqn_agent_2024-06-24_22-11-46.pth"))
+    policy.load_state_dict(torch.load("hex_dqn_agent_2024-06-25_10-34-03.pth"))
     target = DQN(size, size * size).to(device)
     target.load_state_dict(policy.state_dict())
 
 
-    lr = 0.001
-    gamma_lr = 0.99
-    step_size = 2000
+    lr = 0.01
+    gamma_lr = 0.9
+    step_size = 1000
     optimizer = optim.Adam(policy.parameters(), lr = lr)
     scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma_lr)
     criterion = nn.MSELoss()

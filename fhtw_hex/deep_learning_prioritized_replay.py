@@ -9,47 +9,83 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from dqn import DQN, hexPosition
 from datetime import datetime
-from torch.optim.lr_scheduler import StepLR
+import random
 
-class ReplayMemory:
-    def __init__(self, capacity):
+class PrioritizedReplayMemory:
+    def __init__(self, capacity, alpha=0.6):
+        self.capacity = capacity
         self.memory = deque(maxlen=capacity)
+        self.priorities = deque(maxlen=capacity)
+        self.alpha = alpha
 
     def push(self, state, action, reward, next_state, done):
+        max_priority = max(self.priorities, default=1.0)
         self.memory.append((state, action, reward, next_state, done))
+        self.priorities.append(max_priority)
 
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
+    def sample(self, batch_size, beta=0.4):
+        if len(self.memory) == self.capacity:
+            priorities = np.array(self.priorities)
+        else:
+            priorities = np.array(self.priorities)[:len(self.memory)]
+
+        probabilities = priorities ** self.alpha
+        probabilities /= probabilities.sum()
+
+        indices = np.random.choice(len(self.memory), batch_size, p=probabilities)
+        samples = [self.memory[idx] for idx in indices]
+
+        total = len(self.memory)
+        weights = (total * probabilities[indices]) ** (-beta)
+        weights /= weights.max()
+
+        batch = list(zip(*samples))
+        states = torch.stack(batch[0])
+        actions = torch.tensor(batch[1]).unsqueeze(1)
+        rewards = torch.tensor(batch[2], dtype=torch.float32)
+        next_states = torch.stack(batch[3])
+        dones = torch.tensor(batch[4], dtype=torch.float32)
+        weights = torch.tensor(weights, dtype=torch.float32)
+
+        return states, actions, rewards, next_states, dones, indices, weights
+
+    def update_priorities(self, batch_indices, batch_priorities):
+        for idx, priority in zip(batch_indices, batch_priorities):
+            self.priorities[idx] = priority
 
     def __len__(self):
         return len(self.memory)
 
-def train_dqn(policy, memory, optimizer, criterion, batch_size, gamma, target, device):
+from torch.optim.lr_scheduler import StepLR
+
+def train_dqn(policy, memory, optimizer, criterion, batch_size, gamma, target, device, beta=0.4):
     if len(memory) < batch_size:
         return
-    transitions = memory.sample(batch_size)
-    batch_state, batch_action, batch_reward, batch_next_state, batch_done = zip(*transitions)
+    states, actions, rewards, next_states, dones, indices, weights = memory.sample(batch_size, beta)
+    states = states.to(device)
+    actions = actions.to(device)
+    rewards = rewards.to(device)
+    next_states = next_states.to(device)
+    dones = dones.to(device)
+    weights = weights.to(device)
 
-    batch_state = torch.stack(batch_state).to(device)
-    batch_action = torch.tensor(batch_action, dtype=torch.long).unsqueeze(1).to(device)
-    batch_reward = torch.tensor(batch_reward, dtype=torch.float32).to(device)
-    batch_next_state = torch.stack(batch_next_state).to(device)
-    batch_done = torch.tensor(batch_done, dtype=torch.float32).to(device)
+    current_q_values = policy(states.unsqueeze(1)).gather(1, actions).squeeze()
+    next_q_values = target(next_states.unsqueeze(1))
 
-    current_q_values = policy(batch_state.unsqueeze(1)).gather(1, batch_action).squeeze()
-    next_q_values = target(batch_next_state.unsqueeze(1))
-
-    valid_action_mask = (batch_next_state == 0).view(batch_next_state.size(0), -1).float().to(device)
+    valid_action_mask = (next_states == 0).view(next_states.size(0), -1).float().to(device)
     next_q_values = next_q_values * valid_action_mask + (1 - valid_action_mask) * float(-2)
 
     max_next_q_values = next_q_values.max(1)[0]
-    expected_q_values = batch_reward + (gamma * max_next_q_values * (1 - batch_done))
+    expected_q_values = rewards + (gamma * max_next_q_values * (1 - dones))
 
-    loss = criterion(current_q_values, expected_q_values)
+    loss = (weights * criterion(current_q_values, expected_q_values)).mean()
 
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
+
+    errors = torch.abs(current_q_values - expected_q_values).cpu().detach().numpy()
+    memory.update_priorities(indices, errors + 1e-6)
 
     return loss.item()
 
@@ -68,7 +104,7 @@ def select_action(agent, state, epsilon, action_space, size, device):
             return action_space[torch.argmax(valid_q_values).item()]
 
 def evaluate_agent(policy, size, device):
-    num_simulations = 20000
+    num_simulations = 2000
     total_episode_length = 0
     total_reward = 0
 
@@ -103,7 +139,7 @@ def evaluate_agent(policy, size, device):
     print(f'Average Episode Length: {average_episode_length}')
     print(f'Average Reward: {average_reward}')
 
-def get_action_no_epsilon(adversary, board, action_set, size=5):
+def get_action_no_epsilon (adversary,board, action_set,size = 5):
     with torch.no_grad():
         q_values = adversary(board.unsqueeze(0).unsqueeze(0)).view(-1)
         valid_q_values = [q_values[action[0] * size + action[1]] for action in action_set]
@@ -113,33 +149,36 @@ def get_action_no_epsilon(adversary, board, action_set, size=5):
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    size = 5
-    num_episodes = 80000
-    memory = ReplayMemory(50000)
+    size = 7
+    num_episodes = 20000
+    memory = PrioritizedReplayMemory(50000)
     batch_size = 64
     gamma = 0.99999
     epsilon_start = 1.0
     epsilon_end = 0.15
-    epsilon_decay = 0.9995
+    epsilon_decay = 0.99999
     TAU = 0.05
 
     adversary = DQN(size, size * size)
-    filename = "hex_dqn_agent_2024-06-16_23-13-40.pth"
-    adversary.load_state_dict(torch.load(filename, map_location=device))
+    filename = "hex_dqn_agent_2024-06-26_16-58-21.pth"
+    adversary.load_state_dict(torch.load(filename))
 
     policy = DQN(size, size * size).to(device)
-    policy.load_state_dict(torch.load(filename, map_location=device))
+    policy.load_state_dict(torch.load("hex_dqn_agent_2024-06-26_16-58-21.pth"))
     target = DQN(size, size * size).to(device)
     target.load_state_dict(policy.state_dict())
 
-    optimizer = optim.Adam(policy.parameters(),lr= 0.01)
-    scheduler = StepLR(optimizer, step_size=1000, gamma=0.99)
+    lr = 0.001
+    gamma_lr = 0.999
+    step_size = 1000
+    optimizer = optim.Adam(policy.parameters(), lr=lr)
+    scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma_lr)
     criterion = nn.MSELoss()
     episode_rewards = []
     losses = []
     update_frequency = 100
 
-    tmp = hexPosition(size=5)
+    tmp = hexPosition(size)
 
     for episode in range(num_episodes):
         game = hexPosition(size)
@@ -148,6 +187,9 @@ def main():
         episode_reward = 0
 
         while game.winner == 0:
+            if random.random() < 0.5: #flip the board by 180 degrees half of the time
+                game.flip_board_180()
+                state = get_state_tensor(game.board).to(device)
             action_space = game.get_action_space()
             action = select_action(policy, state, epsilon, action_space, size, device)
             game.moove(action)
@@ -184,10 +226,8 @@ def main():
     window = np.ones(int(window_size)) / float(window_size)
     test = np.convolve(episode_rewards, window, 'valid')
     plt.plot(test, color='r')
-    plt.scatter(range(len(episode_rewards)), episode_rewards, s=10)
-    plt.xlabel('Episode')
-    plt.ylabel('Reward')
-    plt.title('Reward Evolution During Training')
+    plt.scatter(range(len(episode_rewards)), episode_rewards, marker='o', color='b')
+    plt.title(f'Convolution with window size = {window_size}')
     plt.show()
 
     plt.plot(losses)
@@ -196,11 +236,11 @@ def main():
     plt.title('Loss Evolution During Training')
     plt.show()
 
+
     current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"hex_dqn_agent_{current_datetime}.pth"
     torch.save(policy.state_dict(), filename)
-
-    evaluate_agent(target, size, device)
+    evaluate_agent(policy, size, device)
 
 if __name__ == "__main__":
     main()

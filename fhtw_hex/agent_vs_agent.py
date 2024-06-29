@@ -83,7 +83,7 @@ def human_vs_machine_wrapper(size, human_player, model):
     game.human_vs_machine( human_player=human_player, machine = agent_white)
 
 def evaluate_agent(policy, size):
-    num_simulations = 20000
+    num_simulations = 5000
     total_episode_length = 0
     total_reward = 0
 
@@ -122,8 +122,8 @@ def evaluate_agent(policy, size):
 
 if __name__ == "__main__":
     size = 7  # Board size
-    model_white_path = "hex_dqn_agent_2024-06-25_10-34-03.pth"
-    model_black_path = "hex_dqn_agent_2024-06-25_10-34-03.pth"
+    model_white_path = "hex_dqn_agent_2024-06-26_16-58-21.pth"
+    model_black_path = "hex_dqn_agent_2024-06-26_16-58-21.pth"
 
     # Load the models
     model_white = DQN(size, size * size)
@@ -135,10 +135,10 @@ if __name__ == "__main__":
     model_black.eval()
 
     # Choose whether to play against random agent
-    play_against_random = False # Set t# o False to play agents against each other
+    play_against_random = True # Set t# o False to play agents against each other
 
 
-    play_against_human = True
+    play_against_human = False
     # Run the competition
 
     evaluate = False

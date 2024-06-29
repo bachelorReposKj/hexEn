@@ -156,7 +156,7 @@ def main():
         episode_reward = 0
         episode_done = False
 
-        tmp = hexPosition(size=5)
+        tmp = hexPosition(size=size)
 
 
         while game.winner == 0:

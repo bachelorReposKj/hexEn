@@ -150,7 +150,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     size = 7
-    num_episodes = 20000
+    num_episodes = 200000
     memory = PrioritizedReplayMemory(50000)
     batch_size = 64
     gamma = 0.99999
@@ -159,12 +159,12 @@ def main():
     epsilon_decay = 0.99999
     TAU = 0.05
 
-    adversary = DQN(size, size * size)
-    filename = "hex_dqn_agent_2024-06-26_16-58-21.pth"
-    adversary.load_state_dict(torch.load(filename))
+    #adversary = DQN(size, size * size)
+    #filename = "hex_dqn_agent_2024-06-26_16-58-21.pth"
+    #adversary.load_state_dict(torch.load(filename))
 
     policy = DQN(size, size * size).to(device)
-    policy.load_state_dict(torch.load("hex_dqn_agent_2024-06-26_16-58-21.pth"))
+    #policy.load_state_dict(torch.load("hex_dqn_agent_2024-06-26_16-58-21.pth"))
     target = DQN(size, size * size).to(device)
     target.load_state_dict(policy.state_dict())
 
@@ -195,10 +195,10 @@ def main():
             game.moove(action)
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             if reward == 0:
-                action = get_action_no_epsilon(adversary, get_state_tensor(tmp.recode_black_as_white(game.board)), game.get_action_space(recode_black_as_white=True))
-                action = tmp.recode_coordinates(action)
-                game.moove(action)
-                #game._random_moove()
+                #action = get_action_no_epsilon(adversary, get_state_tensor(tmp.recode_black_as_white(game.board)), game.get_action_space(recode_black_as_white=True))
+                #action = tmp.recode_coordinates(action)
+                #game.moove(action)
+                game._random_moove()
             reward = 1 if game.winner == 1 else -1 if game.winner == -1 else 0
             next_state = get_state_tensor(game.board).to(device)
             done = game.winner != 0

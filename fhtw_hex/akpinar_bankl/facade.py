@@ -80,7 +80,3 @@ class agent:
             best_action = action_set[torch.argmax(valid_q_values).item()]
 
         return best_action
-
-
-game = hex_engine.hexPosition(7)
-game.machine_vs_machine(None,agent())

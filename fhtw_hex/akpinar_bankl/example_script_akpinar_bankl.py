@@ -2,7 +2,6 @@
 #note that python does not search directory trees, hence you must provide the mother-directory of the package
 import sys
 sys.path.append("/home/sharwin/Desktop/rl_ss_2023/")
-sys.path.append("C:/Users/elisa/OneDrive/Dokumente/ReinforcementLearning/hexEn")
 
 #importing the module
 from fhtw_hex import hex_engine as engine
